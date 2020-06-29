@@ -19,14 +19,13 @@
 #include <array>
 #include <unordered_map>
 
-#include "imgui-fonts-karla.hpp"
-#include "imgui-fonts-fontawesome.hpp"
 #include "../third-party/json.hpp"
 #include "objects-in-frame.h"
 #include "processing-block-model.h"
 
 #include "realsense-ui-advanced-mode.h"
 #include "fw-update-helper.h"
+#include "updates-model.h"
 
 ImVec4 from_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a, bool consistent_color = false);
 ImVec4 operator+(const ImVec4& c, float v);
@@ -59,6 +58,15 @@ static const ImVec4 green = from_rgba(0x20, 0xe0, 0x20, 0xff, true);
 static const ImVec4 dark_sensor_bg = from_rgba(0x1b, 0x21, 0x25, 170);
 static const ImVec4 red = from_rgba(233, 0, 0, 255, true);
 static const ImVec4 greenish = from_rgba(33, 104, 0, 255);
+
+inline ImVec4 operator*(const ImVec4& color, float t)
+{
+    return ImVec4(color.x * t, color.y * t, color.z * t, color.w * t);
+}
+inline ImVec4 operator+(const ImVec4& a, const ImVec4& b)
+{
+    return ImVec4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
+}
 
 // Helper class that lets smoothly animate between its values
 template<class T>
@@ -163,6 +171,7 @@ namespace rs2
             static const char* settings_tab        { "viewer_model.settings_tab" };
             static const char* sdk_version         { "viewer_model.sdk_version" };
             static const char* last_calib_notice   { "viewer_model.last_calib_notice" };
+            static const char* is_measuring        { "viewer_model.is_measuring" };
 
             static const char* log_to_console      { "viewer_model.log_to_console" };
             static const char* log_to_file         { "viewer_model.log_to_file" };
@@ -172,6 +181,7 @@ namespace rs2
             static const char* show_map_ruler      { "viewer_model.show_map_ruler" };
             static const char* show_stream_details { "viewer_model.show_stream_details" };
             static const char* metric_system       { "viewer_model.metric_system" };
+            static const char* shading_mode        { "viewer_model.shading_mode" };
 
             static const char* last_ip             { "viewer_model.last_ip" };
         }
@@ -195,6 +205,8 @@ namespace rs2
             static const char* show_fps            { "performance.show_fps" };
             static const char* vsync               { "performance.vsync" };
             static const char* font_oversample     { "performance.font_oversample.v2" };
+            static const char* show_skybox         { "performance.show_skybox" };
+            static const char* occlusion_invalidation { "performance.occlusion_invalidation" };
         }
         namespace ply
         {
@@ -221,7 +233,6 @@ namespace rs2
         static const textual_icon camera                   { u8"\uf030" };
         static const textual_icon video_camera             { u8"\uf03d" };
         static const textual_icon edit                     { u8"\uf044" };
-        static const textual_icon check_square_o           { u8"\uf046" };
         static const textual_icon step_backward            { u8"\uf048" };
         static const textual_icon play                     { u8"\uf04b" };
         static const textual_icon pause                    { u8"\uf04c" };
@@ -244,6 +255,7 @@ namespace rs2
         static const textual_icon caret_down               { u8"\uf0d7" };
         static const textual_icon repeat                   { u8"\uf0e2" };
         static const textual_icon circle                   { u8"\uf111" };
+        static const textual_icon check_square_o           { u8"\uf14a" };
         static const textual_icon cubes                    { u8"\uf1b3" };
         static const textual_icon toggle_off               { u8"\uf204" };
         static const textual_icon toggle_on                { u8"\uf205" };
@@ -261,6 +273,8 @@ namespace rs2
         static const textual_icon metadata                 { u8"\uF0AE" };
         static const textual_icon check                    { u8"\uF00C" };
         static const textual_icon mail                     { u8"\uF01C" };
+        static const textual_icon cube                     { u8"\uf1b2" };
+        static const textual_icon measure                  { u8"\uf545" };
     }
 
     class subdevice_model;
@@ -780,6 +794,8 @@ namespace rs2
         void begin_update(std::vector<uint8_t> data,
             viewer_model& viewer, std::string& error_message);
         void begin_update_unsigned(viewer_model& viewer, std::string& error_message);
+        void check_for_device_updates(rs2::context& ctx, std::shared_ptr<updates_model> updates);
+
 
         std::shared_ptr< atomic_objects_in_frame > get_detected_objects() const { return _detected_objects; }
 
@@ -832,11 +848,14 @@ namespace rs2
         void load_viewer_configurations(const std::string& json_str);
         void save_viewer_configurations(std::ofstream& outfile, nlohmann::json& j);
 
+
         std::shared_ptr<recorder> _recorder;
         std::vector<std::shared_ptr<subdevice_model>> live_subdevices;
         periodic_timer      _update_readonly_options_timer;
         bool pause_required = false;
         std::shared_ptr< atomic_objects_in_frame > _detected_objects;
+        std::shared_ptr<updates_model> _updates;
+        sw_update::dev_updates_profile::update_profile _updates_profile;
     };
 
     class viewer_model;
