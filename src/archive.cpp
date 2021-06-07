@@ -194,7 +194,9 @@ namespace librealsense
         {
             unpublish();
             on_release();
-            owner->unpublish_frame(this);
+            if (owner) {
+                owner->unpublish_frame(this);
+            }
         }
     }
 
