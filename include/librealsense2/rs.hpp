@@ -30,6 +30,27 @@ namespace rs2
         error::handle(e);
     }
 
+    inline void reset_logger()
+    {
+        rs2_error* e = nullptr;
+        rs2_reset_logger(&e);
+        error::handle(e);
+    }
+
+    // Enable rolling log file when used with rs2_log_to_file:
+    // Upon reaching (max_size/2) bytes, the log will be renamed with an ".old" suffix and a new log created. Any
+    // previous .old file will be erased.
+    // Must have permissions to remove/rename files in log file directory.
+    //
+    // @param max_size max file size in megabytes
+    //
+    inline void enable_rolling_log_file( unsigned max_size )
+    {
+        rs2_error * e = nullptr;
+        rs2_enable_rolling_log_file( max_size, &e );
+        error::handle( e );
+    }
+    
     /*
         Interface to the log message data we expose.
     */
@@ -148,5 +169,7 @@ inline std::ostream & operator << (std::ostream & o, rs2_exception_type exceptio
 inline std::ostream & operator << (std::ostream & o, rs2_playback_status status) { return o << rs2_playback_status_to_string(status); }
 inline std::ostream & operator << (std::ostream & o, rs2_l500_visual_preset preset) {return o << rs2_l500_visual_preset_to_string(preset);}
 inline std::ostream & operator << (std::ostream & o, rs2_sensor_mode mode) { return o << rs2_sensor_mode_to_string(mode); }
+inline std::ostream & operator << (std::ostream & o, rs2_calibration_type mode) { return o << rs2_calibration_type_to_string(mode); }
+inline std::ostream & operator << (std::ostream & o, rs2_calibration_status mode) { return o << rs2_calibration_status_to_string(mode); }
 
 #endif // LIBREALSENSE_RS2_HPP

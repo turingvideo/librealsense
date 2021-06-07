@@ -26,9 +26,10 @@ class single_consumer_queue
     // when need to stop
     std::atomic<bool> _need_to_flush;
     std::atomic<bool> _was_flushed;
+    std::function<void(T const &)> _on_drop_callback;
 public:
-    explicit single_consumer_queue<T>(unsigned int cap = QUEUE_MAX_SIZE)
-        : _queue(), _mutex(), _deq_cv(), _enq_cv(), _cap(cap), _need_to_flush(false), _was_flushed(false), _accepting(true)
+    explicit single_consumer_queue<T>(unsigned int cap = QUEUE_MAX_SIZE, std::function<void(T const &)> on_drop_callback = nullptr)
+        : _queue(), _mutex(), _deq_cv(), _enq_cv(), _cap(cap), _accepting(true), _need_to_flush(false), _was_flushed(false), _on_drop_callback(on_drop_callback)
     {}
 
     void enqueue(T&& item)
@@ -39,6 +40,10 @@ public:
             _queue.push_back(std::move(item));
             if (_queue.size() > _cap)
             {
+                if (_on_drop_callback)
+                {
+                    _on_drop_callback(_queue.front());
+                }
                 _queue.pop_front();
             }
         }
@@ -208,9 +213,9 @@ public:
     private:
         dispatcher* _owner;
     };
-
-    dispatcher(unsigned int cap)
-        : _queue(cap),
+    typedef std::function<void(cancellable_timer const &)> action;
+    dispatcher(unsigned int cap, std::function <void(action)> on_drop_callback = nullptr)
+        : _queue(cap, on_drop_callback),
           _was_stopped(true),
           _was_flushed(false),
           _is_alive(true)
@@ -266,7 +271,9 @@ public:
         auto func = std::move(item);
         invoke([&, func](dispatcher::cancellable_timer c)
         {
+            std::lock_guard<std::mutex> lk(_blocking_invoke_mutex);
             func(c);
+
             done = true;
             _blocking_invoke_cv.notify_one();
         }, is_blocking);
@@ -288,6 +295,9 @@ public:
     {
         {
             std::unique_lock<std::mutex> lock(_was_stopped_mutex);
+
+            if (_was_stopped.load()) return;
+
             _was_stopped = true;
             _was_stopped_cv.notify_all();
         }
@@ -310,6 +320,8 @@ public:
         stop();
         _queue.clear();
         _is_alive = false;
+
+        if (_thread.joinable())
         _thread.join();
     }
 
@@ -379,13 +391,20 @@ public:
 
     void stop()
     {
-        _stopped = true;
-        _dispatcher.stop();
+        if (!_stopped.load()) {
+            _stopped = true;
+            _dispatcher.stop();
+        }
     }
 
     ~active_object()
     {
         stop();
+    }
+
+    bool is_active() const
+    {
+        return !_stopped;
     }
 private:
     void do_loop()
@@ -409,7 +428,7 @@ class watchdog
 {
 public:
     watchdog(std::function<void()> operation, uint64_t timeout_ms) :
-            _operation(std::move(operation)), _timeout_ms(timeout_ms)
+            _timeout_ms(timeout_ms), _operation(std::move(operation))
     {
         _watcher = std::make_shared<active_object<>>([this](dispatcher::cancellable_timer cancellable_timer)
         {
@@ -440,7 +459,6 @@ private:
     uint64_t _timeout_ms;
     bool _kicked = false;
     bool _running = false;
-    bool _blocker = true;
     std::function<void()> _operation;
     std::shared_ptr<active_object<>> _watcher;
 };

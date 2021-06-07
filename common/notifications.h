@@ -9,7 +9,8 @@
 #include <chrono>
 
 #include "ux-window.h"
-#include "../src/concurrency.h"
+
+#include "output-model.h"
 
 namespace rs2
 {
@@ -35,6 +36,13 @@ namespace rs2
     {
         notification_model();
         notification_model(const notification_data& n);
+
+        template <class dst_type>
+        bool is()
+        {
+            return dynamic_cast<const dst_type*>(this) != nullptr;
+        }
+
         double get_age_in_ms(bool total = false) const;
         bool interacted() const;
         std::function<void()> draw(ux_window& win, int w, int y, 
@@ -86,6 +94,7 @@ namespace rs2
 
         bool is_delayed() const;
         void delay(int days);
+        void reset_delay();
 
         float last_x, last_y;
         bool animating = false;
@@ -159,6 +168,7 @@ namespace rs2
 
         std::shared_ptr<process_manager> update_manager = nullptr;
         int update_state = 0;
+        int update_state_prev = 0;
         progress_bar _progress_bar;
     };
 
@@ -190,30 +200,40 @@ namespace rs2
     {
         std::shared_ptr<notification_model> add_notification(const notification_data& n);
         std::shared_ptr<notification_model> add_notification(const notification_data& n,
-                              std::function<void()> custom_action, 
-                              bool use_custom_action = true);
+            std::function<void()> custom_action,
+            bool use_custom_action = true);
         void add_notification(std::shared_ptr<notification_model> model);
-        void draw(ux_window& win, int w, int h, std::string& error_message);
+        bool draw(ux_window& win, int w, int h, std::string& error_message);
 
-        void foreach_log(std::function<void(const std::string& line)> action);
-        void add_log(std::string line);
+        notifications_model() {}
 
-        void draw_snoozed_button();
+        void add_log(std::string message, rs2_log_severity severity = RS2_LOG_SEVERITY_INFO )
+        {
+            output.add_log(severity, "", 0, message);
+        }
 
-        notifications_model() : last_snoozed(std::chrono::system_clock::now()) {}
-        
+        output_model output;
+
     private:
         std::vector<std::shared_ptr<notification_model>> pending_notifications;
-        std::vector<std::shared_ptr<notification_model>> snoozed_notifications;
         int index = 1;
         const int MAX_SIZE = 6;
         std::recursive_mutex m;
-        bool new_log = false;
 
-        single_consumer_queue<std::string> incoming_log_queue;
-        std::deque<std::string> notification_logs;
         std::shared_ptr<notification_model> selected;
-        std::chrono::system_clock::time_point last_snoozed;
+    };
+
+    struct sw_recommended_update_alert_model : public notification_model
+    {
+        sw_recommended_update_alert_model(const std::string & current_version, const std::string & recommended_version, const std::string &recommended_version_link);
+
+        void set_color_scheme( float t ) const override;
+        void draw_content(
+            ux_window & win, int x, int y, float t, std::string & error_message ) override;
+        int calc_height() override { return 150; }
+        const std::string _current_version;
+        const std::string _recommended_version;
+        const std::string _recommended_version_link;
     };
 
     inline ImVec4 saturate(const ImVec4& a, float f)
@@ -225,6 +245,16 @@ namespace rs2
     {
         return{ v.x, v.y, v.z, a };
     }
+
+    struct sw_update_up_to_date_model : public notification_model
+    {
+        sw_update_up_to_date_model();
+
+        void set_color_scheme(float t) const override;
+        void draw_content(
+            ux_window& win, int x, int y, float t, std::string& error_message) override;
+        int calc_height() override { return 65; }
+    };    
 
     class export_manager : public process_manager
     {

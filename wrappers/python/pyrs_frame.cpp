@@ -2,7 +2,7 @@
 Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
 
 #include "python.hpp"
-#include "../include/librealsense2/hpp/rs_frame.hpp"
+#include "../include/librealsense2/rs.hpp"
 
 void init_frame(py::module &m) {
     py::class_<BufData> BufData_py(m, "BufData", py::buffer_protocol());
@@ -56,7 +56,9 @@ void init_frame(py::module &m) {
         .def("stream_name", &rs2::stream_profile::stream_name, "The stream's human-readable name.")
         .def("is_default", &rs2::stream_profile::is_default, "Checks if the stream profile is marked/assigned as default, "
              "meaning that the profile will be selected when the user requests stream configuration using wildcards.")
-        .def("__nonzero__", &rs2::stream_profile::operator bool, "Checks if the profile is valid")
+        .def("__nonzero__", &rs2::stream_profile::operator bool, "Checks if the profile is valid") // Called to implement truth value testing in Python 2
+        .def("__bool__", &rs2::stream_profile::operator bool, "Checks if the profile is valid") // Called to implement truth value testing in Python 3
+
         .def("get_extrinsics_to", &rs2::stream_profile::get_extrinsics_to, "Get the extrinsic transformation between two profiles (representing physical sensors)", "to"_a)
         .def("register_extrinsics_to", &rs2::stream_profile::register_extrinsics_to, "Assign extrinsic transformation parameters "
              "to a specific profile (sensor). The extrinsic information is generally available as part of the camera calibration, "
@@ -109,7 +111,8 @@ void init_frame(py::module &m) {
         // .def(py::self = py::self) // can't overload assignment in python
         .def(py::init<rs2::frame>())
         .def("swap", &rs2::frame::swap, "Swap the internal frame handle with the one in parameter", "other"_a)
-        .def("__nonzero__", &rs2::frame::operator bool, "check if internal frame handle is valid")
+        .def("__nonzero__", &rs2::frame::operator bool, "check if internal frame handle is valid") // Called to implement truth value testing in Python 2
+        .def("__bool__", &rs2::frame::operator bool, "check if internal frame handle is valid") // Called to implement truth value testing in Python 3
         .def("get_timestamp", &rs2::frame::get_timestamp, "Retrieve the time at which the frame was captured")
         .def_property_readonly("timestamp", &rs2::frame::get_timestamp, "Time at which the frame was captured. Identical to calling get_timestamp.")
         .def("get_frame_timestamp_domain", &rs2::frame::get_frame_timestamp_domain, "Retrieve the timestamp domain.")
@@ -130,8 +133,26 @@ void init_frame(py::module &m) {
         .def(BIND_DOWNCAST(frame, video_frame))
         .def(BIND_DOWNCAST(frame, depth_frame))
         .def(BIND_DOWNCAST(frame, motion_frame))
-        .def(BIND_DOWNCAST(frame, pose_frame));
+        .def(BIND_DOWNCAST(frame, pose_frame))
         // No apply_filter?
+        .def( "__repr__", []( const rs2::frame &self )
+        {
+            std::stringstream ss;
+            ss << "<" << SNAME << ".frame";
+            if( auto fs = self.as< rs2::frameset >() )
+            {
+                ss << "set";
+                for( auto sf : fs )
+                    ss << " " << rs2_format_to_string( sf.get_profile().format() );
+            }
+            else
+            {
+                ss << " " << rs2_format_to_string( self.get_profile().format() );
+            }
+            ss << " #" << self.get_frame_number();
+            ss << ">";
+            return ss.str();
+        });
 
     py::class_<rs2::video_frame, rs2::frame> video_frame(m, "video_frame", "Extends the frame class with additional video related attributes and functions.");
     video_frame.def(py::init<rs2::frame>())
@@ -144,7 +165,17 @@ void init_frame(py::module &m) {
         .def("get_bits_per_pixel", &rs2::video_frame::get_bits_per_pixel, "Retrieve bits per pixel.")
         .def_property_readonly("bits_per_pixel", &rs2::video_frame::get_bits_per_pixel, "Bits per pixel. Identical to calling get_bits_per_pixel.")
         .def("get_bytes_per_pixel", &rs2::video_frame::get_bytes_per_pixel, "Retrieve bytes per pixel.")
-        .def_property_readonly("bytes_per_pixel", &rs2::video_frame::get_bytes_per_pixel, "Bytes per pixel. Identical to calling get_bytes_per_pixel.");
+        .def_property_readonly("bytes_per_pixel", &rs2::video_frame::get_bytes_per_pixel, "Bytes per pixel. Identical to calling get_bytes_per_pixel.")
+        .def("extract_target_dimensions", [](const rs2::video_frame& self, rs2_calib_target_type target_type)->std::vector<float>
+        {
+            std::vector<float> target_dims;
+            if (target_type == RS2_CALIB_TARGET_RECT_GAUSSIAN_DOT_VERTICES)
+            {
+                target_dims.resize(4);
+                self.extract_target_dimensions(RS2_CALIB_TARGET_RECT_GAUSSIAN_DOT_VERTICES, target_dims.data(), 4);
+            }
+            return target_dims;
+        }, "This will calculate the four target dimenson size(s) in millimeter on the specific target.");
 
     py::class_<rs2::vertex> vertex(m, "vertex"); // No docstring in C++
     vertex.def_readwrite("x", &rs2::vertex::x)

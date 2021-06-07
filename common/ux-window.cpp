@@ -21,6 +21,11 @@
 
 #include <iostream>
 
+void glfw_error_callback(int error, const char* description)
+{
+    std::cerr << "GLFW Driver Error: " << description << "\n";
+}
+
 namespace rs2
 {
     void GLAPIENTRY MessageCallback(GLenum source,
@@ -44,13 +49,14 @@ namespace rs2
         config_file::instance().set_default(configurations::update::allow_rc_firmware, false);
         config_file::instance().set_default(configurations::update::recommend_calibration, true);
         config_file::instance().set_default(configurations::update::recommend_updates, true);
+        config_file::instance().set_default(configurations::update::sw_updates_url, server_versions_db_url);
+        config_file::instance().set_default(configurations::update::sw_updates_official_server, true);
 
         config_file::instance().set_default(configurations::window::is_fullscreen, false);
         config_file::instance().set_default(configurations::window::saved_pos, false);
         config_file::instance().set_default(configurations::window::saved_size, false);
 
         config_file::instance().set_default(configurations::viewer::is_measuring, false);
-        config_file::instance().set_default(configurations::viewer::log_filename, get_folder_path(special_folder::user_documents) + "librealsense.log");
         config_file::instance().set_default(configurations::viewer::log_to_console, true);
         config_file::instance().set_default(configurations::viewer::log_to_file, false);
         config_file::instance().set_default(configurations::viewer::log_severity, 2);
@@ -58,7 +64,6 @@ namespace rs2
         config_file::instance().set_default(configurations::viewer::ground_truth_r, 2500);
 
         config_file::instance().set_default(configurations::record::compression_mode, 2); // Let the device decide
-        config_file::instance().set_default(configurations::record::default_path, get_folder_path(special_folder::user_documents));
         config_file::instance().set_default(configurations::record::file_save_mode, 0); // Auto-select name
 
         config_file::instance().set_default(configurations::performance::show_fps, false);
@@ -69,8 +74,26 @@ namespace rs2
         config_file::instance().set_default(configurations::ply::use_normals, false);
         config_file::instance().set_default(configurations::ply::encoding, configurations::ply::binary);
 
+        config_file::instance().set_default(configurations::viewer::commands_xml, "./Commands.xml");
+        config_file::instance().set_default(configurations::viewer::hwlogger_xml, "./HWLoggerEvents.xml");
+
+        std::string path;
+        try
+        {
+            path = get_folder_path(special_folder::user_documents);
+        }
+        catch (const std::exception&)
+        {
+            std::string msg = "Failed to get Documents folder";
+            rs2::log(RS2_LOG_SEVERITY_INFO, msg.c_str());
+            path = "";
+        }
+        config_file::instance().set_default(configurations::viewer::log_filename, path + "librealsense.log");
+        config_file::instance().set_default(configurations::record::default_path, path);
+
 #ifdef __APPLE__
-        config_file::instance().set_default(configurations::performance::font_oversample, 8);
+
+        config_file::instance().set_default(configurations::performance::font_oversample, 2);
         config_file::instance().set_default(configurations::performance::enable_msaa, true);
         config_file::instance().set_default(configurations::performance::msaa_samples, 4);
         // On Mac-OS, mixing OpenGL 2 with OpenGL 3 is not supported by the driver
@@ -198,6 +221,8 @@ namespace rs2
 
         if (!glfwInit())
             exit(1);
+
+        glfwSetErrorCallback(glfw_error_callback);
 
         _hand_cursor = glfwCreateStandardCursor(GLFW_HAND_CURSOR);
         _cross_cursor = glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR);
@@ -340,7 +365,7 @@ namespace rs2
             _2d_vis = std::make_shared<visualizer_2d>(std::make_shared<splash_screen_shader>());
 
         // Load fonts to be used with the ImGui - TODO move to RAII
-        imgui_easy_theming(_font_14, _font_18);
+        imgui_easy_theming(_font_14, _font_18, _monofont);
 
         // Register for UI-controller events
         glfwSetWindowUserPointer(_win, this);
@@ -395,7 +420,7 @@ namespace rs2
 
     ux_window::ux_window(const char* title, context &ctx) :
         _win(nullptr), _width(0), _height(0), _output_height(0),
-        _font_14(nullptr), _font_18(nullptr), _app_ready(false),
+        _font_14(nullptr), _font_18(nullptr), _monofont(nullptr), _app_ready(false),
         _first_frame(true), _query_devices(true), _missing_device(false),
         _hourglass_index(0), _dev_stat_message{}, _keep_alive(true), _title(title), _ctx(ctx)
     {
@@ -434,10 +459,10 @@ namespace rs2
         glOrtho(0, _width, _height, 0, -1, +1);
 
         // Fade-in the logo
-        auto opacity = smoothstep(float(_splash_timer.elapsed_ms()), 100.f, 2500.f);
-        auto ox = 0.7f - smoothstep(float(_splash_timer.elapsed_ms()), 200.f, 1900.f) * 0.4f;
+        auto opacity = smoothstep(float(_splash_timer.get_elapsed_ms()), 100.f, 2500.f);
+        auto ox = 0.7f - smoothstep(float(_splash_timer.get_elapsed_ms()), 200.f, 1900.f) * 0.4f;
         auto oy = 0.5f;
-        auto power = std::sin(smoothstep(float(_splash_timer.elapsed_ms()), 150.f, 2200.f) * 3.14f) * 0.96f;
+        auto power = std::sin(smoothstep(float(_splash_timer.get_elapsed_ms()), 150.f, 2200.f) * 3.14f) * 0.96f;
 
         if (_use_glsl_render)
         {
@@ -454,11 +479,11 @@ namespace rs2
         }
 
         std::string hourglass = u8"\uf251";
-        static periodic_timer every_200ms(std::chrono::milliseconds(200));
+        static utilities::time::periodic_timer every_200ms(std::chrono::milliseconds(200));
         bool do_200ms = every_200ms;
         if (_query_devices && do_200ms)
         {
-            _missing_device = _ctx.query_devices(RS2_PRODUCT_LINE_ANY).size() == 0;
+            _missing_device = _ctx.query_devices(RS2_PRODUCT_LINE_ANY_INTEL).size() == 0;
             _hourglass_index = (_hourglass_index + 1) % 5;
 
             if (!_missing_device)
@@ -542,7 +567,7 @@ namespace rs2
         }
 
         // If we are just getting started, render the Splash Screen instead of normal UI
-        while (res && (!_app_ready || _splash_timer.elapsed_ms() < 2000.f))
+        while (res && (!_app_ready || _splash_timer.get_elapsed_ms() < 2000.f))
         {
             res = !glfwWindowShouldClose(_win);
             glfwPollEvents();
@@ -595,6 +620,7 @@ namespace rs2
             glfwSetCursor(_win, nullptr);
         _cross_hovered = false;
         _link_hovered = false;
+        _hovers_any_input_window = false;
 
         return res;
     }

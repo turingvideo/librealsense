@@ -1,10 +1,11 @@
 // License: Apache 2.0. See LICENSE file in root directory.
 // Copyright(c) 2015 Intel Corporation. All Rights Reserved.
+
 #pragma once
 #ifndef LIBREALSENSE_UNITTESTS_COMMON_H
 #define LIBREALSENSE_UNITTESTS_COMMON_H
 
-#include "catch/catch.hpp"
+#include "approx.h"
 #include "../include/librealsense2/rs.hpp"
 #include "../include/librealsense2/hpp/rs_context.hpp"
 #include "../include/librealsense2/hpp/rs_internal.hpp"
@@ -105,9 +106,11 @@ inline std::vector<profile>  configure_all_supported_streams(rs2::sensor& sensor
         { RS2_STREAM_COLOR,     RS2_FORMAT_RGB8,          width, height,    0, fps},
         { RS2_STREAM_INFRARED,  RS2_FORMAT_Y8,            width, height,    1, fps},
         { RS2_STREAM_INFRARED,  RS2_FORMAT_Y8,            width, height,    2, fps},
+        { RS2_STREAM_INFRARED,  RS2_FORMAT_Y8,            width, height,    0, fps},
+        { RS2_STREAM_CONFIDENCE,RS2_FORMAT_RAW8,          width, height,    0, fps},
         { RS2_STREAM_FISHEYE,   RS2_FORMAT_RAW8,          width, height,    0, fps},
+        { RS2_STREAM_ACCEL,     RS2_FORMAT_MOTION_XYZ32F,   1,      1,      0, 200},
         { RS2_STREAM_GYRO,      RS2_FORMAT_MOTION_XYZ32F,   1,      1,      0, 200},
-        { RS2_STREAM_ACCEL,     RS2_FORMAT_MOTION_XYZ32F,   1,      1,      0, 250}
     };
 
     std::vector<profile> profiles;
@@ -135,7 +138,7 @@ inline std::vector<profile>  configure_all_supported_streams(rs2::sensor& sensor
                 {
                     if (auto  motion = p.as<rs2::motion_stream_profile>())
                     {
-                        if (p.fps() == profile.fps &&
+                        if (((profile.fps / (p.fps()+1)) <= 2.f)  && // Approximate IMU rates. No need for being exact
                             p.stream_index() == profile.index &&
                             p.stream_type() == profile.stream &&
                             p.format() == profile.format)
@@ -214,6 +217,8 @@ inline void disable_sensitive_options_for(rs2::sensor& sen)
     {
         rs2::option_range range;
         REQUIRE_NOTHROW(range = sen.get_option_range(RS2_OPTION_EXPOSURE)); // TODO: fails sometimes with "Element Not Found!"
+        //float val = (range.min + (range.def-range.min)/10.f); // TODO - generate new records using the modified exposure
+
         REQUIRE_NOTHROW(sen.set_option(RS2_OPTION_EXPOSURE, range.def));
     }
 }
@@ -426,9 +431,9 @@ inline float vector_length(const float(&v)[3])
 // Require that r = cross(a, b)
 inline void require_cross_product(const float(&r)[3], const float(&a)[3], const float(&b)[3])
 {
-    REQUIRE(r[0] == Approx(a[1] * b[2] - a[2] * b[1]));
-    REQUIRE(r[1] == Approx(a[2] * b[0] - a[0] * b[2]));
-    REQUIRE(r[2] == Approx(a[0] * b[1] - a[1] * b[0]));
+    REQUIRE(r[0] == approx(a[1] * b[2] - a[2] * b[1]));
+    REQUIRE(r[1] == approx(a[2] * b[0] - a[0] * b[2]));
+    REQUIRE(r[2] == approx(a[0] * b[1] - a[1] * b[0]));
 }
 
 // Require that vector is exactly the zero vector
@@ -440,15 +445,15 @@ inline void require_zero_vector(const float(&vector)[3])
 // Require that a == transpose(b)
 inline void require_transposed(const float(&a)[9], const float(&b)[9])
 {
-    REQUIRE(a[0] == Approx(b[0]));
-    REQUIRE(a[1] == Approx(b[3]));
-    REQUIRE(a[2] == Approx(b[6]));
-    REQUIRE(a[3] == Approx(b[1]));
-    REQUIRE(a[4] == Approx(b[4]));
-    REQUIRE(a[5] == Approx(b[7]));
-    REQUIRE(a[6] == Approx(b[2]));
-    REQUIRE(a[7] == Approx(b[5]));
-    REQUIRE(a[8] == Approx(b[8]));
+    REQUIRE(a[0] == approx(b[0]));
+    REQUIRE(a[1] == approx(b[3]));
+    REQUIRE(a[2] == approx(b[6]));
+    REQUIRE(a[3] == approx(b[1]));
+    REQUIRE(a[4] == approx(b[4]));
+    REQUIRE(a[5] == approx(b[7]));
+    REQUIRE(a[6] == approx(b[2]));
+    REQUIRE(a[7] == approx(b[5]));
+    REQUIRE(a[8] == approx(b[8]));
 }
 
 // Require that matrix is an orthonormal 3x3 matrix
@@ -457,21 +462,23 @@ inline void require_rotation_matrix(const float(&matrix)[9])
     const float row0[] = { matrix[0], matrix[3], matrix[6] };
     const float row1[] = { matrix[1], matrix[4], matrix[7] };
     const float row2[] = { matrix[2], matrix[5], matrix[8] };
-    CAPTURE(row0[0]);
-    CAPTURE(row0[1]);
-    CAPTURE(row0[2]);
-    CAPTURE(row1[0]);
-    CAPTURE(row1[1]);
-    CAPTURE(row1[2]);
-    CAPTURE(row2[0]);
-    CAPTURE(row2[1]);
-    CAPTURE(row2[2]);
-    REQUIRE(dot_product(row0, row0) == Approx(1));
-    REQUIRE(dot_product(row1, row1) == Approx(1));
-    REQUIRE(dot_product(row2, row2) == Approx(1));
-    REQUIRE(dot_product(row0, row1) == Approx(0));
-    REQUIRE(dot_product(row1, row2) == Approx(0));
-    REQUIRE(dot_product(row2, row0) == Approx(0));
+    CAPTURE( full_precision( row0[0] ));
+    CAPTURE( full_precision( row0[1] ));
+    CAPTURE( full_precision( row0[2] ));
+    CAPTURE( full_precision( row1[0] ));
+    CAPTURE( full_precision( row1[1] ));
+    CAPTURE( full_precision( row1[2] ));
+    CAPTURE( full_precision( row2[0] ));
+    CAPTURE( full_precision( row2[1] ));
+    CAPTURE( full_precision( row2[2] ));
+    CHECK(dot_product(row0, row0) == approx(1.f));
+    CAPTURE( full_precision( dot_product( row1, row1 )));
+    CHECK( dot_product( row1, row1 ) == approx( 1.f ) );     // this line is problematic, and needs higher epsilon!!
+    CHECK_THAT(dot_product(row1, row1), approx_equals(1.f));
+    CHECK(dot_product(row2, row2) == approx(1.f));
+    CHECK(dot_product(row0, row1) == approx(0.f));
+    CHECK(dot_product(row1, row2) == approx(0.f));
+    CHECK(dot_product(row2, row0) == approx(0.f));
     require_cross_product(row0, row1, row2);
     require_cross_product(row0, row1, row2);
     require_cross_product(row0, row1, row2);
@@ -481,7 +488,8 @@ inline void require_rotation_matrix(const float(&matrix)[9])
 inline void require_identity_matrix(const float(&matrix)[9])
 {
     static const float identity_matrix_3x3[] = { 1,0,0, 0,1,0, 0,0,1 };
-    for (int i = 0; i < 9; ++i) REQUIRE(matrix[i] == Approx(identity_matrix_3x3[i]));
+    for (int i = 0; i < 9; ++i)
+        REQUIRE(matrix[i] == approx(identity_matrix_3x3[i]));
 }
 
 struct test_duration {
@@ -791,6 +799,69 @@ inline rs2::stream_profile get_profile_by_resolution_type(rs2::sensor& s, res_ty
     std::stringstream ss;
     ss << "stream profile for " << width << "," << height << " resolution is not supported!";
     throw std::runtime_error(ss.str());
+}
+
+inline std::shared_ptr<rs2::device> do_with_waiting_for_camera_connection(rs2::context ctx, std::shared_ptr<rs2::device> dev, std::string serial, std::function<void()> operation)
+{
+    std::mutex m;
+    bool disconnected = false;
+    bool connected = false;
+    std::shared_ptr<rs2::device> result;
+    std::condition_variable cv;
+
+    ctx.set_devices_changed_callback([&](rs2::event_information info) mutable
+        {
+            if (info.was_removed(*dev))
+            {
+                std::unique_lock<std::mutex> lock(m);
+                disconnected = true;
+                cv.notify_all();
+            }
+            auto list = info.get_new_devices();
+            if (list.size() > 0)
+            {
+                for (auto cam : list)
+                {
+                    if (serial == cam.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER))
+                    {
+                        std::unique_lock<std::mutex> lock(m);
+                        connected = true;
+                        result = std::make_shared<rs2::device>(cam);
+
+                        disable_sensitive_options_for(*result);
+                        cv.notify_all();
+                        break;
+                    }
+                }
+            }
+        });
+
+    operation();
+
+    std::unique_lock<std::mutex> lock(m);
+    REQUIRE(wait_for_reset([&]() {
+        return cv.wait_for(lock, std::chrono::seconds(20), [&]() { return disconnected; });
+        }, dev));
+    REQUIRE(cv.wait_for(lock, std::chrono::seconds(20), [&]() { return connected; }));
+    REQUIRE(result);
+    ctx.set_devices_changed_callback( []( rs2::event_information info ) {} );  // reset callback
+
+    return result;
+}
+
+inline rs2::depth_sensor restart_first_device_and_return_depth_sensor(const rs2::context& ctx, const rs2::device_list& devices_list)
+{
+    rs2::device dev = devices_list[0];
+    std::string serial;
+    REQUIRE_NOTHROW(serial = dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER));
+    //forcing hardware reset to simulate device disconnection
+    auto shared_dev = std::make_shared<rs2::device>(devices_list.front());
+    shared_dev = do_with_waiting_for_camera_connection(ctx, shared_dev, serial, [&]()
+        {
+            shared_dev->hardware_reset();
+        });
+    rs2::depth_sensor depth_sensor = dev.query_sensors().front();
+    return depth_sensor;
 }
 
 

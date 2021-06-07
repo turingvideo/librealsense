@@ -3,9 +3,9 @@
 
 #pragma once
 
+#include <unordered_set>
 #include "model-views.h"
 #include "notifications.h"
-#include "viewer.h"
 #include "skybox.h"
 #include "measurement.h"
 #include "updates-model.h"
@@ -62,9 +62,8 @@ namespace rs2
 
         const float panel_width = 340.f;
         const float panel_y = 50.f;
-        const float default_log_h = 110.f;
 
-        float get_output_height() const { return (is_output_collapsed ? default_log_h : 15); }
+        float get_output_height() const { return (float)(not_model->output.get_output_height()); }
 
         rs2::frame handle_ready_frames(const rect& viewer_rect, ux_window& window, int devices, std::string& error_message);
 
@@ -84,7 +83,7 @@ namespace rs2
         frame get_3d_texture_source(frame f);
 
         bool is_3d_depth_source(frame f);
-        bool is_3d_texture_source(frame f);
+        bool is_3d_texture_source(frame f) const;
 
         std::shared_ptr<texture_buffer> upload_frame(frame&& f);
 
@@ -103,8 +102,6 @@ namespace rs2
 
         void popup_firmware_update_progress(const ux_window& window, const float progress);
 
-        void show_event_log(ImFont* font_14, float x, float y, float w, float h);
-
         void render_pose(rs2::rect stream_rect, float buttons_heights);
         void try_select_pointcloud(ux_window& win);
 
@@ -122,6 +119,8 @@ namespace rs2
 
         void gc_streams();
 
+        bool is_option_skipped(rs2_option opt) const;
+
         std::mutex streams_mutex;
         std::map<int, stream_model> streams;
         std::map<int, int> streams_origin;
@@ -132,11 +131,10 @@ namespace rs2
 
         context &ctx;
         std::shared_ptr<notifications_model> not_model = std::make_shared<notifications_model>();
-        bool is_output_collapsed = false;
         bool is_3d_view = false;
         bool paused = false;
         bool metric_system = true;
-        uint32_t ground_truth_r = 2500;
+        uint32_t ground_truth_r = 1200;
 
         enum export_type
         {
@@ -158,6 +156,7 @@ namespace rs2
         bool draw_frustrum = true;
         bool support_non_syncronized_mode = true;
         std::atomic<bool> synchronization_enable;
+        std::atomic<bool> synchronization_enable_prev_state;
         std::atomic<int> zo_sensors;
 
         int selected_depth_source_uid = -1;
@@ -183,6 +182,7 @@ namespace rs2
         bool show_help_screen = false;
         bool occlusion_invalidation = true;
         bool glsl_available = false;
+        bool modal_notification_on = false; // a notification which was expanded
 
         press_button_model trajectory_button{ u8"\uf1b0", u8"\uf1b0","Draw trajectory", "Stop drawing trajectory", true };
         press_button_model grid_object_button{ u8"\uf1cb", u8"\uf1cb",  "Configure Grid", "Configure Grid", false };
@@ -192,10 +192,12 @@ namespace rs2
 
         std::shared_ptr<updates_model> updates;
 
+        std::unordered_set<int> _hidden_options;
+        bool _support_ir_reflectivity;
     private:
 
         void check_permissions();
-
+        void hide_common_options();
         std::vector<popup> _active_popups;
 
         struct rgb {
@@ -254,5 +256,6 @@ namespace rs2
         skybox _skybox;
 
         measurement _measurements;
+        
     };
 }

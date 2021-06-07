@@ -43,6 +43,10 @@ namespace librealsense
                 _callback->on_frame((rs2_frame*)ptr, _source_wrapper.get_c_wrapper());
             }
         }
+        catch (std::exception const & e)
+        {
+            LOG_ERROR("Exception was thrown during user processing callback: " + std::string(e.what()));
+        }
         catch (...)
         {
             LOG_ERROR("Exception was thrown during user processing callback!");
@@ -164,13 +168,14 @@ namespace librealsense
         auto stream_selector = std::make_shared<ptr_option<int>>(RS2_STREAM_ANY, RS2_STREAM_COUNT, 1, RS2_STREAM_ANY, (int*)&_stream_filter.stream, "Stream type");
         for (int s = RS2_STREAM_ANY; s < RS2_STREAM_COUNT; s++)
         {
-            stream_selector->set_description(s, "Process - " + std::string (rs2_stream_to_string((rs2_stream)s)));
+            stream_selector->set_description(float(s), "Process - " + std::string (rs2_stream_to_string((rs2_stream)s)));
         }
-        stream_selector->on_set([this, stream_selector](float val)
+        std::weak_ptr<ptr_option<int>> stream_selector_ref = stream_selector;
+        stream_selector->on_set([this, stream_selector_ref](float val)
         {
             std::lock_guard<std::mutex> lock(_mutex);
 
-            if (!stream_selector->is_valid(val))
+            if (!stream_selector_ref.lock()->is_valid(val))
                 throw invalid_value_exception(to_string()
                     << "Unsupported stream filter, " << val << " is out of range.");
 
@@ -180,13 +185,14 @@ namespace librealsense
         auto format_selector = std::make_shared<ptr_option<int>>(RS2_FORMAT_ANY, RS2_FORMAT_COUNT, 1, RS2_FORMAT_ANY, (int*)&_stream_filter.format, "Stream format");
         for (int f = RS2_FORMAT_ANY; f < RS2_FORMAT_COUNT; f++)
         {
-            format_selector->set_description(f, "Process - " + std::string(rs2_format_to_string((rs2_format)f)));
+            format_selector->set_description(float(f), "Process - " + std::string(rs2_format_to_string((rs2_format)f)));
         }
-        format_selector->on_set([this, format_selector](float val)
+        std::weak_ptr<ptr_option<int>> format_selector_ref = format_selector;
+        format_selector->on_set([this, format_selector_ref](float val)
         {
             std::lock_guard<std::mutex> lock(_mutex);
 
-            if (!format_selector->is_valid(val))
+            if (!format_selector_ref.lock()->is_valid(val))
                 throw invalid_value_exception(to_string()
                     << "Unsupported stream format filter, " << val << " is out of range.");
 
@@ -194,11 +200,12 @@ namespace librealsense
         });
 
         auto index_selector = std::make_shared<ptr_option<int>>(-1, std::numeric_limits<int>::max(), 1, -1, &_stream_filter.index, "Stream index");
-        index_selector->on_set([this, index_selector](float val)
+        std::weak_ptr<ptr_option<int>> index_selector_ref = index_selector;
+        index_selector->on_set([this, index_selector_ref](float val)
         {
             std::lock_guard<std::mutex> lock(_mutex);
 
-            if (!index_selector->is_valid(val))
+            if (!index_selector_ref.lock()->is_valid(val))
                 throw invalid_value_exception(to_string()
                     << "Unsupported stream index filter, " << val << " is out of range.");
 

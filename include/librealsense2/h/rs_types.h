@@ -64,8 +64,40 @@ typedef struct rs2_intrinsics
     float         fx;        /**< Focal length of the image plane, as a multiple of pixel width */
     float         fy;        /**< Focal length of the image plane, as a multiple of pixel height */
     rs2_distortion model;    /**< Distortion model of the image */
-    float         coeffs[5]; /**< Distortion coefficients */
+    float         coeffs[5]; /**< Distortion coefficients. Order for Brown-Conrady: [k1, k2, p1, p2, k3]. Order for F-Theta Fish-eye: [k1, k2, k3, k4, 0]. Other models are subject to their own interpretations */
 } rs2_intrinsics;
+
+/** \brief Video DSM (Digital Sync Module) parameters for calibration (same layout as in FW ac_depth_params)
+    This is the block in MC that converts angles to dimensionless integers reported to MA (using "DSM coefficients").
+*/
+#pragma pack( push, 1 )
+    typedef struct rs2_dsm_params
+    {
+        unsigned long long timestamp;               /**< system_clock::time_point::time_since_epoch().count() */
+        unsigned short version;                     /**< MAJOR<<12 | MINOR<<4 | PATCH */
+        unsigned char model;                        /**< rs2_dsm_correction_model */
+        unsigned char flags[5];                     /**< TBD, now 0s */
+        float h_scale;                              /**< the scale factor to horizontal DSM scale thermal results */
+        float v_scale;                              /**< the scale factor to vertical DSM scale thermal results */
+        float h_offset;                             /**< the offset to horizontal DSM offset thermal results */
+        float v_offset;                             /**< the offset to vertical DSM offset thermal results */
+        float rtd_offset;                           /**< the offset to the Round-Trip-Distance delay thermal results */
+        unsigned char temp_x2;                      /**< the temperature recorded times 2 (ldd for depth; hum for rgb) */
+        float mc_h_scale;                           /**< the scale factor to horizontal LOS coefficients in MC */
+        float mc_v_scale;                           /**< the scale factor to vertical LOS coefficients in MC */
+        unsigned char weeks_since_calibration;      /**< time (in weeks) since factory calibration */
+        unsigned char ac_weeks_since_calibaration;  /**< time (in weeks) between factory calibration and last AC event */
+        unsigned char reserved[1];
+    } rs2_dsm_params;
+#pragma pack( pop )
+
+typedef enum rs2_dsm_correction_model
+{
+    RS2_DSM_CORRECTION_NONE,        /**< hFactor and hOffset are not used, and no artificial error is induced */
+    RS2_DSM_CORRECTION_AOT,         /**< Aging-over-thermal (default); aging-induced error is uniform across temperature */
+    RS2_DSM_CORRECTION_TOA,         /**< Thermal-over-aging; aging-induced error changes alongside temperature */
+    RS2_DSM_CORRECTION_COUNT
+} rs2_dsm_correction_model;
 
 /** \brief Motion device intrinsics: scale, bias, and variances. */
 typedef struct rs2_motion_device_intrinsic
@@ -180,6 +212,15 @@ typedef enum rs2_extension
     RS2_EXTENSION_FISHEYE_SENSOR,
     RS2_EXTENSION_DEPTH_HUFFMAN_DECODER,
     RS2_EXTENSION_SERIALIZABLE,
+    RS2_EXTENSION_FW_LOGGER,
+    RS2_EXTENSION_AUTO_CALIBRATION_FILTER,
+    RS2_EXTENSION_DEVICE_CALIBRATION,
+    RS2_EXTENSION_CALIBRATED_SENSOR,
+    RS2_EXTENSION_HDR_MERGE,
+    RS2_EXTENSION_SEQUENCE_ID_FILTER,
+    RS2_EXTENSION_MAX_USABLE_RANGE_SENSOR,
+    RS2_EXTENSION_DEBUG_STREAM_SENSOR,
+    RS2_EXTENSION_CALIBRATION_CHANGE_DEVICE,
     RS2_EXTENSION_COUNT
 } rs2_extension;
 const char* rs2_extension_type_to_string(rs2_extension type);
@@ -244,6 +285,10 @@ typedef struct rs2_options_list rs2_options_list;
 typedef struct rs2_devices_changed_callback rs2_devices_changed_callback;
 typedef struct rs2_notification rs2_notification;
 typedef struct rs2_notifications_callback rs2_notifications_callback;
+typedef struct rs2_firmware_log_message rs2_firmware_log_message;
+typedef struct rs2_firmware_log_parsed_message rs2_firmware_log_parsed_message;
+typedef struct rs2_firmware_log_parser rs2_firmware_log_parser;
+typedef struct rs2_terminal_parser rs2_terminal_parser;
 typedef void (*rs2_log_callback_ptr)(rs2_log_severity, rs2_log_message const *, void * arg);
 typedef void (*rs2_notification_callback_ptr)(rs2_notification*, void*);
 typedef void(*rs2_software_device_destruction_callback_ptr)(void*);

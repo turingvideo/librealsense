@@ -8,13 +8,13 @@ file(READ "firmware-version.h" ver)
 
 message(STATUS "Fetching recommended firmwares:")
 
-set(REALSENSE_FIRMWARE_URL "http://realsense-hw-public.s3.amazonaws.com" CACHE STRING
+set(REALSENSE_FIRMWARE_URL "https://librealsense.intel.com" CACHE STRING
     "URL to download firmware binaries from")
 
 string(REGEX MATCH "D4XX_RECOMMENDED_FIRMWARE_VERSION \"([0-9]+.[0-9]+.[0-9]+.[0-9]+)\"" _ ${ver})
 set(D4XX_FW_VERSION ${CMAKE_MATCH_1})
 message(STATUS "D4XX_FW_VERSION: ${D4XX_FW_VERSION}")
-set(D4XX_FW_SHA1 f3a488ea7f07a630a335f024fa9fec662a84c8ed)
+set(D4XX_FW_SHA1 0417e3c84c7ef948c97659fcd53378742ef52e42)
 set(D4XX_FW_URL "${REALSENSE_FIRMWARE_URL}/Releases/RS4xx/FW")
 
 
@@ -33,7 +33,7 @@ set(T26X_FW_URL "${REALSENSE_FIRMWARE_URL}/Releases/TM2/FW/target/${T26X_FW_VERS
 string(REGEX MATCH "L5XX_RECOMMENDED_FIRMWARE_VERSION \"([0-9]+.[0-9]+.[0-9]+.[0-9]+)\"" _ ${ver})
 set(L5XX_FW_VERSION ${CMAKE_MATCH_1})
 message(STATUS "L5XX_FW_VERSION: ${L5XX_FW_VERSION}")
-set(L5XX_FW_SHA1 5bb7d4e68994328f324559db66a0c586c3037afa)
+set(L5XX_FW_SHA1 ab73e5bfc520c0aa0340cada4b3e317b8fd31a4d)
 set(L5XX_FW_URL "${REALSENSE_FIRMWARE_URL}/Releases/L5xx/FW")
 
 add_library(${PROJECT_NAME} STATIC empty.c)

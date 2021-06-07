@@ -35,12 +35,13 @@ using namespace pybind11::literals;
 // Binding enums
 const std::string rs2_prefix{ "rs2_" };
 std::string make_pythonic_str(std::string str);
-#define BIND_ENUM(module, rs2_enum_type, RS2_ENUM_COUNT, docstring)                                                         \
+#define BIND_ENUM(module, rs2_enum_type, RS2_ENUM_COUNT, docstring) BIND_ENUM_CUSTOM( module, rs2_enum_type, 0, RS2_ENUM_COUNT-1, docstring)
+#define BIND_ENUM_CUSTOM(module, rs2_enum_type, FIRST, LAST, docstring)                                                     \
     static std::string rs2_enum_type##pyclass_name = std::string(#rs2_enum_type).substr(rs2_prefix.length());               \
     /* Above 'static' is required in order to keep the string alive since py::class_ does not copy it */                    \
     py::enum_<rs2_enum_type> py_##rs2_enum_type(module, rs2_enum_type##pyclass_name.c_str(), docstring);                    \
     /* std::cout << std::endl << "## " << rs2_enum_type##pyclass_name  << ":" << std::endl; */                              \
-    for (int i = 0; i < static_cast<int>(RS2_ENUM_COUNT); i++)                                                              \
+    for (int i = FIRST; i <= LAST; i++)                                                                                     \
     {                                                                                                                       \
         rs2_enum_type v = static_cast<rs2_enum_type>(i);                                                                    \
         const char* enum_name = rs2_enum_type##_to_string(v);                                                               \
@@ -147,7 +148,7 @@ MAP_FMT_TO_TYPE(RS2_FORMAT_Y8I, uint8_t);
 //MAP_FMT_TO_TYPE(RS2_FORMAT_INZI, );
 MAP_FMT_TO_TYPE(RS2_FORMAT_INVI, uint8_t);
 //MAP_FMT_TO_TYPE(RS2_FORMAT_W10, );
-
+MAP_FMT_TO_TYPE(RS2_FORMAT_FG, uint16_t);
 template <rs2_format FMT> struct itemsize {
     static constexpr size_t func() { return sizeof(typename FmtToType<FMT>::type); }
 };
@@ -185,6 +186,7 @@ template<template<rs2_format> class F>
     case RS2_FORMAT_INZI: return F<RS2_FORMAT_INZI>::func();
     case RS2_FORMAT_INVI: return F<RS2_FORMAT_INVI>::func();
     case RS2_FORMAT_W10: return F<RS2_FORMAT_W10>::func();
+    case RS2_FORMAT_FG: return F<RS2_FORMAT_FG>::func();
     // c++11 standard doesn't allow throw in constexpr function switch case
     case RS2_FORMAT_COUNT: throw std::runtime_error("format.count is not a valid value for arguments of type format!");
     default: return F<RS2_FORMAT_ANY>::func();
@@ -229,6 +231,7 @@ void init_pipeline(py::module &m);
 void init_internal(py::module &m);
 void init_export(py::module &m);
 void init_advanced_mode(py::module &m);
+void init_serializable_device(py::module& m);
 void init_util(py::module &m);
 
 #endif // LIBREALSENSE_PYTHON_HPP
