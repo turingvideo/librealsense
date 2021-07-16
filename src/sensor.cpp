@@ -352,7 +352,7 @@ namespace librealsense
                     if (diff >10 )
                         LOG_DEBUG("!! Frame allocation took " << diff << " msec");
 
-                    if (fh.frame)
+                    if (fh.frame && fh->get_frame_data() && fr->data.data())
                     {
                         memcpy((void*)fh->get_frame_data(), fr->data.data(), sizeof(byte)*fr->data.size());
                         auto&& video = (video_frame*)fh.frame;
